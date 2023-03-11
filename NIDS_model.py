@@ -6,9 +6,7 @@ import matplotlib.pyplot as plt
 import time
 import torch
 import preprocessor as pre
-
 import neural_tor
-import MLP as mlp
 import onlinehd
 from sklearn.metrics import accuracy_score
 from sklearn.svm import SVC
