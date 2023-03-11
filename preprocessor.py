@@ -7,16 +7,17 @@ import torch
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, QuantileTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 
 DATA_DIR  = os.path.join(os.path.abspath("."), "data")
 
 class cicids(object):
-    def __init__(self, trainsize, validationsize, testsize, data_path = DATA_DIR, dataset_name='cicids2017'):
+    def __init__(self, train, test, data_path = DATA_DIR, dataset_name='cicids2017'):
         self.data_path = data_path
-        self.trainsize = trainsize
-        self.validationsize = validationsize
-        self.testsize = testsize
+        self.trainsize = train
+        self.testsize = test
         self.data = None
         self.features = None
         self.label = None
@@ -24,10 +25,8 @@ class cicids(object):
     def read_data(self):
         filenames = glob.glob(os.path.join(self.data_path, self.dataset_name, '*.csv'))
         datasets = [pd.read_csv(filename) for filename in filenames]
-        # Remove white spaces and rename the columns
         for dataset in datasets:
             dataset.columns = [self._clean_column_name(column) for column in dataset.columns]
-        # Concatenate the datasets
         self.data = pd.concat(datasets, axis=0, ignore_index=True)
         if self.dataset_name == 'cicids2017':
             self.data.drop(labels=['fwd_header_length.1'], axis= 1, inplace=True)
@@ -38,32 +37,24 @@ class cicids(object):
         column = column.lower()
         return column
     def remove_duplicate_values(self):
-        # Remove duplicate rows
         self.data.drop_duplicates(inplace=True, keep=False, ignore_index=True)
     def remove_missing_values(self):
-        # Remove missing values
         self.data.dropna(axis=0, inplace=True, how="any")
+
     def remove_infinite_values(self):
-        # Replace infinite values to NaN
         self.data.replace([-np.inf, np.inf], np.nan, inplace=True)
-        # Remove infinte values
         self.data.dropna(axis=0, how='any', inplace=True)
+        
     def remove_constant_features(self, threshold=0.01):
-        # Standard deviation denoted by sigma (σ) is the average of the squared root differences from the mean.
         data_std = self.data.std(numeric_only=True)
-        # Find Features that meet the threshold
         constant_features = [column for column, std in data_std.iteritems() if std < threshold]
-        # Drop the constant features
         self.data.drop(labels=constant_features, axis=1, inplace=True)
+
     def remove_correlated_features(self, threshold=0.98):
-        # Correlation matrix
         data_corr = self.data.corr()
-        # Create & Apply mask
         mask = np.triu(np.ones_like(data_corr, dtype=bool))
         tri_df = data_corr.mask(mask)
-        # Find Features that meet the threshold
         correlated_features = [c for c in tri_df.columns if any(tri_df[c] > threshold)]
-        # Drop the highly correlated features
         self.data.drop(labels=correlated_features, axis=1, inplace=True)
     def group_labels(self):
         # Proposed Groupings
@@ -102,18 +93,17 @@ class cicids(object):
             self.data['label_category'] = self.data['label'].map(lambda x: attack_group_2017[x])
         if self.dataset_name == 'cicids2018':
             self.data['label_category'] = self.data['label'].map(lambda x: attack_group_2018[x])
-    def train_valid_test_split(self):
+    def train_test_split(self):
         # self.labels = self.data['label_category']
         # self.features = self.data.drop(labels=['label', 'label_category'], axis=1)
         self.labels = self.data['label']
         self.features = self.data.drop(labels=['label'], axis=1)       
-        X_train, X_test, y_train, y_test = train_test_split(self.features, self.labels, test_size=(self.validationsize + self.testsize),\
+        X_train, X_test, y_train, y_test = train_test_split(self.features, self.labels, test_size=self.testsize,\
             random_state=42, stratify=self.labels)
-        X_test, X_val, y_test, y_val = train_test_split(X_test, y_test,\
-            test_size = self.validationsize / (self.validationsize + self.testsize), random_state=42)
-        return (X_train, y_train), (X_val, y_val), (X_test, y_test)
-    def scale(self, training_set, validation_set, testing_set):
-        (X_train, y_train), (X_val, y_val), (X_test, y_test) = training_set, validation_set, testing_set
+
+        return (X_train, y_train), (X_test, y_test)
+    def scale(self, training_set, testing_set):
+        (X_train, y_train), (X_test, y_test) = training_set, testing_set
         categorical_features = self.features.select_dtypes(exclude=["number"]).columns
         numeric_features = self.features.select_dtypes(exclude=[object]).columns
         preprocessor = ColumnTransformer(transformers=[
@@ -123,14 +113,12 @@ class cicids(object):
         # Preprocess the features
         columns = numeric_features.tolist()
         X_train = pd.DataFrame(preprocessor.fit_transform(X_train), columns=columns)
-        X_val = pd.DataFrame(preprocessor.transform(X_val), columns=columns)
         X_test = pd.DataFrame(preprocessor.transform(X_test), columns=columns)
         # Preprocess the labels
         le = LabelEncoder()
         y_train = pd.DataFrame(le.fit_transform(y_train), columns=["label"])
-        y_val = pd.DataFrame(le.transform(y_val), columns=["label"])
         y_test = pd.DataFrame(le.transform(y_test), columns=["label"])
-        return (X_train, y_train), (X_val, y_val), (X_test, y_test)
+        return (X_train, y_train), (X_test, y_test)
 
 def pre_cicids(dataset):
     # Read datasets
@@ -145,19 +133,15 @@ def pre_cicids(dataset):
     # Create new label category
     # dataset.group_labels()
     # Split & Normalise data sets
-    training_set, validation_set, testing_set            = dataset.train_valid_test_split()
-    (X_train, y_train), (X_val, y_val), (X_test, y_test) = dataset.scale(training_set, validation_set, testing_set)
-    X, y = (X_train, X_val, X_test), (y_train, y_val, y_test)
+    training_set, testing_set            = dataset.train_test_split()
+    (X_train, y_train), (X_test, y_test) = dataset.scale(training_set, testing_set)
     n_features = X_train.shape[1]
-    n_classes = len(np.unique(np.concatenate((y_train, y_val, y_test))))
+    n_classes = len(np.unique(np.concatenate((y_train, y_test))))
+    X, y = (X_train, X_test), (y_train, y_test)
     return X, y, n_features, n_classes
 
 # kdd preprocessor 
-def pre_kdd(path, trainsize=0.6, validationsize = 0.2, testsize = 0.2): 
-    def feature_map(feature):
-        d = dict([(y,x) for x,y in enumerate(sorted(set(feature)))])
-        feature = [d[x] for x in feature]
-        return feature
+def pre_kdd(path, train=0.7, test = 0.3): 
     cols ="""duration, protocol_type, service, flag, src_bytes,\
             dst_bytes, land, wrong_fragment, urgent, hot, num_failed_logins,\
             logged_in, num_compromised, root_shell, su_attempted, num_root, num_file_creations,\
@@ -176,7 +160,6 @@ def pre_kdd(path, trainsize=0.6, validationsize = 0.2, testsize = 0.2):
         'multihop': 'r2l', 'neptune': 'dos', 'nmap': 'probe', 'perl': 'u2r', 'phf': 'r2l', 'pod': 'dos',\
         'portsweep': 'probe', 'rootkit': 'u2r', 'satan': 'probe', 'smurf': 'dos', 'spy': 'r2l', 'teardrop': 'dos',
         'warezclient': 'r2l', 'warezmaster': 'r2l',}   
-    
     df = pd.read_csv(path, names = columns)
     df['Attack Type'] = df.target.apply(lambda r:attacks_types[r[:-1]])
     df.drop(['target'], axis = 1, inplace = True)
@@ -199,16 +182,77 @@ def pre_kdd(path, trainsize=0.6, validationsize = 0.2, testsize = 0.2):
     X = df.drop(['Attack Type'], axis = 1)
     n_features, n_classes = X.shape[1], len(np.unique(y))
     X=(X-X.mean())/X.std() # normalize
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = (validationsize + testsize), random_state = 42)
-    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size = (testsize / (validationsize + testsize)), random_state = 42)
-    X, y = (X_train, X_val, X_test), (y_train, y_val, y_test)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = test, random_state = 42)
+    X, y = (X_train, X_test), (y_train, y_test)
     return X, y, n_features, n_classes
 
 def to_torch(X, y):
-    X_train_torch,  X_val_torch, X_test_torch \
-        = torch.tensor(X[0].values).float(), torch.tensor(X[1].values).float(), torch.tensor(X[2].values).float()
-    y_train_torch, y_val_torch,  y_test_torch \
-        = torch.tensor(y[0].values.ravel()), torch.tensor(y[1].values.ravel()), torch.tensor(y[2].values.ravel())
-    X_torch = (X_train_torch, X_val_torch, X_test_torch)
-    y_torch = (y_train_torch, y_val_torch, y_test_torch)
+    X_train_torch, X_test_torch \
+        = torch.tensor(X[0].values).float(), torch.tensor(X[1].values).float()
+    y_train_torch, y_test_torch \
+        = torch.tensor(y[0].values.ravel()), torch.tensor(y[1].values.ravel())
+    X_torch = (X_train_torch, X_test_torch)
+    y_torch = (y_train_torch, y_test_torch)
     return X_torch, y_torch
+
+# unsw15_preprocessor
+def UNSW_NB15_preprocess(path1 = "./data/unsw15/train.csv",\
+    path2 =  "./data/unsw15/test.csv", train = 0.7, test = 0.3):
+    data = pd.concat([pd.read_csv(path1), pd.read_csv(path2)])
+    data.drop_duplicates(inplace=True, keep=False, ignore_index=True)
+    data.dropna(axis=0, inplace=True, how="any")
+    data.replace([-np.inf, np.inf], np.nan, inplace=True)
+    data_std = data.std(numeric_only=True)
+    constant_features = [column for column, std in data_std.iteritems() if std < 0.01]
+    data.drop(labels=constant_features, axis=1, inplace=True)
+    data_corr = data.corr()
+    mask = np.triu(np.ones_like(data_corr, dtype=bool))
+    tri_df = data_corr.mask(mask)
+    correlated_features = [c for c in tri_df.columns if any(tri_df[c] > 0.98)]
+    data.drop(labels=correlated_features, axis=1, inplace=True)
+    
+    num_cols = data._get_numeric_data().columns
+    cate_cols = list(set(data.columns)-set(num_cols))
+    for i in cate_cols:
+        data[i] = feature_map(data[i])
+    
+    labels = data['attack_cat']
+    features = data.drop(labels=['attack_cat'], axis=1)  
+    pca_X = principal_components(X = features, n_components='mle')
+    X_train, X_test, y_train, y_test = train_test_split(pca_X, labels, test_size=test, \
+        random_state = 42, stratify = labels)
+    X, y = (X_train, X_test), (y_train, y_test)
+    # categorical_features = features.select_dtypes(exclude=["number"]).columns
+    # numeric_features = features.select_dtypes(exclude=[object]).columns
+    # preprocessor = ColumnTransformer(transformers=[
+    #     ('categoricals', OneHotEncoder(drop='first', sparse=False, handle_unknown='error'), categorical_features),
+    #     ('numericals', QuantileTransformer(), numeric_features)
+    # ])
+    # columns = numeric_features.tolist()
+    # X_train = pd.DataFrame(preprocessor.fit_transform(X_train), columns=columns)
+    # X_val = pd.DataFrame(preprocessor.transform(X_val), columns=columns)
+    # X_test = pd.DataFrame(preprocessor.transform(X_test), columns=columns)
+    # # Preprocess the labels
+    # le = LabelEncoder()
+    # y_train = pd.DataFrame(le.fit_transform(y_train), columns=["label"])
+    # y_val = pd.DataFrame(le.transform(y_val), columns=["label"])
+    # y_test = pd.DataFrame(le.transform(y_test), columns=["label"])
+    
+    # X, y = (X_train, X_val, X_test), (y_train, y_val, y_test)
+    n_features = X_train.shape[1]
+    n_classes = len(np.unique(labels))
+    return X, y, n_features, n_classes
+
+    
+def principal_components(X, n_components):
+    X = StandardScaler().fit_transform(X) #normalize
+    # pca = PCA(n_components = 'mle')
+    pca = PCA(n_components = n_components)
+    principalComponents = pca.fit_transform(X)
+    X = pd.DataFrame(data = principalComponents)
+    return X
+
+def feature_map(feature):
+    d = dict([(y,x) for x,y in enumerate(sorted(set(feature)))])
+    feature = [d[x] for x in feature]
+    return feature

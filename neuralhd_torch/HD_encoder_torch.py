@@ -24,17 +24,17 @@ class HD_encoder:
         #     self.noises = np.random.uniform(0, 2 * math.pi, self.D)
         # else:
         #     self.noises = np.zeros(self.D)
-    def encodeData(self, data, param):
-        n = data.size(0)
-        bsize = math.ceil(0.01*n)
-        encoded = torch.empty(n, param["D"], device = data.device, dtype = data.dtype)
-        temp = torch.empty(bsize, param["D"], device=data.device, dtype = data.dtype)
+    # def encodeData(self, data, param):
+    #     n = data.size(0)
+    #     bsize = math.ceil(0.01*n)
+    #     encoded = torch.empty(n, param["D"], device = data.device, dtype = data.dtype)
+    #     temp = torch.empty(bsize, param["D"], device=data.device, dtype = data.dtype)
 
-        for i in range(0, n, bsize):
-            torch.matmul(data[i:i+bsize], self.basis.T, out=temp)
-            torch.add(temp, self.base, out=encoded[i:i+bsize])
-            encoded[i:i+bsize].cos_().mul_(temp.sin_())
-        return encoded
+    #     for i in range(0, n, bsize):
+    #         torch.matmul(data[i:i+bsize], self.basis.T, out=temp)
+    #         torch.add(temp, self.base, out=encoded[i:i+bsize])
+    #         encoded[i:i+bsize].cos_().mul_(temp.sin_())
+    #     return encoded
 
         
     # #encode one vector/sample into a HD vector
@@ -46,14 +46,14 @@ class HD_encoder:
 
     # # encode data using the given basis
     # # noise: default Gaussian noise
-    # def encodeData(self, data, param):
-    #     noises = []
-    #     # encoded_data = torch.empty(param["D"], param["nFeatures"])
-    #     # print(self.basis.size(), data.size()) 
-    #     encoded_data = torch.matmul(data, self.basis.T).cos_()
-    #     # print(encoded_data.shape)
-    #     # print(type(encoded_data))
-    #     return encoded_data
+    def encodeData(self, data, param):
+        # noises = []
+        encoded_data = torch.empty(param["D"], param["nFeatures"])
+        # print(self.basis.size(), data.size()) 
+        encoded_data = torch.matmul(data, self.basis.T).cos_()
+        # print(encoded_data.shape)
+        # print(type(encoded_data))
+        return encoded_data
 
     # Update basis of the HDE
     def updateBasis(self, basis):

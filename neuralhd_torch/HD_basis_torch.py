@@ -25,7 +25,7 @@ class HD_basis:
         self.param["gen_type"] = gen_type
         if gen_type == Generator.Vanilla:
             self.vanilla(param)
-
+            
     def vanilla(self, param):
         self.basis = torch.empty(param["D"], param["nFeatures"])
         for i in range(self.param["D"]):
