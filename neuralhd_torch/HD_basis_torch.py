@@ -1,6 +1,8 @@
 from .Config import config, Generator
 import time
 import torch 
+from torch.distributions import normal
+
 
 def generate_vector(vector_length, vector_type, param):
     if vector_type == "Gaussian":
@@ -27,15 +29,17 @@ class HD_basis:
             self.vanilla(param)
             
     def vanilla(self, param):
-        self.basis = torch.empty(param["D"], param["nFeatures"])
-        for i in range(self.param["D"]):
-            self.basis[: i] = generate_vector(self.param["nFeatures"], self.param["vector"], self.param)
+        # self.basis = torch.empty(param["D"], param["nFeatures"])
+        self.basis = torch.randn(param["D"], self.param["nFeatures"])
+        # for i in range(self.param["D"]):
+        #     self.basis[: i] = generate_vector(self.param["nFeatures"], self.param["vector"], self.param)
 
     def updateBasis(self, toChange = None):
         for i in toChange:
             self.basis[i] = generate_vector(self.param["nFeatures"], self.param["vector"], self.param)
 
     def getBasis(self):
+        print(self.basis)
         return self.basis
 
     def getParam(self):
