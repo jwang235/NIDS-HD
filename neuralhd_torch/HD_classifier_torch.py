@@ -71,7 +71,7 @@ class HD_classifier:
 
     def fit(self, mask, data, label, param, batch = 1024): # From OnlineHD Iterative Fit
         lr = param["lr"]
-        print(lr)
+        # print(lr)
         if self.use_cuda:
             mask = mask.to("cuda")
         data = data * mask
@@ -107,10 +107,10 @@ class HD_classifier:
         normed_classes = torch.nn.functional.normalize(self.classes, p=2.0, dim=0, eps=1e-12, out=None)
         # print(normed_classes)
         # print(normed_classes.shape)
-        variances = torch.var(normed_classes, axis = 0) 
+        variance = torch.var(normed_classes, axis = 0) 
         # print(len(variances))
-        order = torch.argsort(variances)
-        return order
+        order = torch.argsort(variance)
+        return order, variance
 
  
      # Some basis are to be update

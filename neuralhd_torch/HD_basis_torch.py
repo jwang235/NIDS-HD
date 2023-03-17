@@ -1,6 +1,7 @@
 from .Config import config, Generator
 import time
 import torch 
+import numpy as np
 from torch.distributions import normal
 
 
@@ -34,12 +35,21 @@ class HD_basis:
         # for i in range(self.param["D"]):
         #     self.basis[: i] = generate_vector(self.param["nFeatures"], self.param["vector"], self.param)
 
-    def updateBasis(self, toChange = None):
+    def updateBasis(self, toChange, variance):
+        new_var = 0
+        temp = []
         for i in toChange:
-            self.basis[i] = generate_vector(self.param["nFeatures"], self.param["vector"], self.param)
+            # print(i)
+            while new_var < variance[i]:
+                # print("generate new basis vector")
+                temp = generate_vector(self.param["nFeatures"], self.param["vector"], self.param)
+                # print(temp)
+                new_var = torch.var(temp)
+            self.basis[i] = temp
+            
 
     def getBasis(self):
-        print(self.basis)
+        # print(self.basis)
         return self.basis
 
     def getParam(self):

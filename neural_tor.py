@@ -59,9 +59,9 @@ class NeuralHD(object):
             if self.train_accs[-1] >= self.max_acc: 
                 self.max_acc = self.train_accs[-1]
                 self.best_hdc, self.best_hdb = copy.deepcopy(self.hdc), copy.deepcopy(self.hdb)
-            orders = self.hdc.evaluateBasis()
+            orders, variance = self.hdc.evaluateBasis()[0], self.hdc.evaluateBasis()[1]
             toDrop = orders[ : self.amountDrop]
-            self.hdb.updateBasis(toDrop)
+            self.hdb.updateBasis(toDrop, variance)
             self.hde.updateBasis(self.hdb.basis)
             trainencoded = self.hde.encodeData(X, self.param)
             self.hdc.updateClasses()
