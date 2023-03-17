@@ -18,19 +18,20 @@ import Quantize as quant
 from torch.nn.functional import normalize
 
 
-# This is the torch version of NeuralHD, and all input data should be torch tensor
 class NeuralHD(object): 
-    def __init__(self, D: int, eD: int, percentDrop: int, epochs: int, n_features: int, n_classes: int):
+    def __init__(self, D: int, eD: int, percentDrop: int, epochs: int, n_features: int, n_classes: int, lr: float):
         self.param =  neuralhd_torch.Config.config
         self.param["D"] = D
         self.param["nFeatures"] = n_features
         self.param["nClasses"] = n_classes
+        self.param["lr"] = lr
         self.epochs = epochs
         self.hdb = HDB.HD_basis(HDB.Generator.Vanilla, self.param)
         self.basis =  self.hdb.getBasis()
         self.hde = HDE.HD_encoder(self.basis, self.param)
         self.hdc = HDC.HD_classifier(0, self.param)
-        self.test_accs = []
+        # self.test_accs = []
+        self.train_accs = []
         self.amountDrop = math.ceil(percentDrop * self.param["D"])
         self.regenTimes = math.ceil((eD - self.param["D"])/self.amountDrop)
         self.max_acc = 0
@@ -48,69 +49,40 @@ class NeuralHD(object):
     #     return self
         
     def fit(self, X, y):
-        traindata, trainlabels = X[0], y[0]
-        # print(traindata.size(), trainlabels.size())
-        testdata, testlabels = X[1], y[1]
-        #  print(testdata.size(), testlabels.size())
-        trainencoded = self.hde.encodeData(traindata, self.param)
-        testencoded = self.hde.encodeData(testdata, self.param)  
-        #  print(trainencoded.size(), testencoded.size())      
+        trainencoded = self.hde.encodeData(X, self.param)   
         for i in range(self.regenTimes + 1):
             for j in range(self.epochs): 
                 mask = self.hdc.prefit(trainencoded, self.param)
-                # print(mask.size())
-                self.hdc.fit(mask, trainencoded, trainlabels, self.param)
-                test_acc = 100 * self.hdc.test(testencoded, testlabels)[0]
-                self.test_accs.append(test_acc)
-                # print(self.test_accs[-1])
-            if self.test_accs[-1] >= self.max_acc: 
-                self.max_acc = self.test_accs[-1]
+                self.hdc.fit(mask, trainencoded, y, self.param)
+                acc = 100 * self.hdc.test(trainencoded, y)[0]
+                self.train_accs.append(acc)
+            if self.train_accs[-1] >= self.max_acc: 
+                self.max_acc = self.train_accs[-1]
                 self.best_hdc, self.best_hdb = copy.deepcopy(self.hdc), copy.deepcopy(self.hdb)
-            
             orders = self.hdc.evaluateBasis()
             toDrop = orders[ : self.amountDrop]
             self.hdb.updateBasis(toDrop)
             self.hde.updateBasis(self.hdb.basis)
-            trainencoded = self.hde.encodeData(traindata, self.param)
-            testencoded = self.hde.encodeData(testdata, self.param)
+            trainencoded = self.hde.encodeData(X, self.param)
             self.hdc.updateClasses()
     
-    def test(self, testdata, testlabels, quantize = False, bits = None):    
+    def test(self, testdata, testlabels):    
         hde = HDE.HD_encoder(self.best_hdb.getBasis(), self.param)
         testencoded = hde.encodeData(testdata, self.param)
-        if quantize == True: 
-            model = torch.nn.functional.normalize(self.best_hdc.classes, p=2.0, dim=1, eps=1e-12, out=None)
-            model = quant.quantize(model, bits)
-            testencoded = quant.quantize(testencoded, bits)
-            test_start = time.time()
-            scores = testencoded @ model.T
-            pred = scores.argmax(1)
-            test_acc = ((pred == testlabels).sum() / (testlabels.shape[0]))
-            test_time = time.time() - test_start
-        else: 
-            test_start = time.time()
-            # testencoded = hde.encodeData(testdata, self.param)
-            test_acc, pred = self.best_hdc.test(testencoded, testlabels)
-            test_time = time.time() - test_start
-            test_acc = test_acc.item()
+        test_start = time.time()
+        test_acc, pred = self.best_hdc.test(testencoded, testlabels)
+        test_time = time.time() - test_start
+        test_acc = test_acc.item()
         return test_time, test_acc, pred
-    
-    
-    
-    
     
 
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>> NeuralHD model
-def model(X, y, D, eD, percentDrop, epochs, n_features, n_classes, quantize = False, bits = None): 
-    neural_obj = NeuralHD(D, eD, percentDrop, epochs, n_features, n_classes)
+def model(X, y, D, eD, percentDrop, epochs, n_features, n_classes, lr): 
+    neural_obj = NeuralHD(D, eD, percentDrop, epochs, n_features, n_classes, lr)
     train_start = time.time()
-    neural_obj.fit(X, y)
+    neural_obj.fit(X[0], y[0])
     train_time = time.time() - train_start
-    if quantize == True: 
-        test_time, test_acc, pred = neural_obj.test(X[2], y[2], quantize = True, bits = bits)
-    else: 
-        test_time, test_acc, pred = neural_obj.test(X[1], y[1])
-    # accuracy, precision, recall, f1, fpr = eval. acc_evaluate(pred, y[2], n_classes)
+    test_time, test_acc, pred = neural_obj.test(X[1], y[1])
     return train_time, test_time, test_acc
 
 # def model_gpu(X, y, D, eD, percentDrop, epochs, n_features, n_classes):
@@ -130,7 +102,6 @@ def model_gpu(X, y, neural_obj):
 
 
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Train size
-
 def train_size(X_torch, y_torch, D, eD, percentDrops, epochs, n_features, n_classes, model, \
                                     train_size = np.arange(0.05, 0.99, 0.05)):
     if model == "cpu": 
@@ -170,22 +141,6 @@ def train_size(X_torch, y_torch, D, eD, percentDrops, epochs, n_features, n_clas
                 csvwriter = csv.writer(csvfile, delimiter=',')
                 csvwriter.writerow((i,) + result)                   
     return None
-
-
-if __name__ == "__main__":
-    X, y, n_features, n_classes = pre.pre_cicids(pre.cicids(trainsize=0.5,\
-    validationsize = 0.25, testsize=0.25, dataset_name='cicids2018')) # cic_ids 2017 
-    X_torch, y_torch = pre.to_torch(X, y)
-    D = 200
-    eD = 5600
-    percentDrop = 0.5
-    epochs = 1
-    
-    bits = [1 , 2, 4, 8, 16, 32]
-    result = model(X_torch, y_torch, D, eD, percentDrop, epochs, n_features, \
-                        n_classes, quantize = True, bits = 4)
-    print(result)
-        
 
 
 

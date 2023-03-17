@@ -30,12 +30,13 @@ class HD_classifier:
         self.param = param
         self.use_cuda = False
         
-    def update(self, weight, mask, guess, answer, rate):
-        sample = weight * mask
-        self.counts[guess] += 1
-        self.counts[answer] += 1
-        self.classes[guess]  -= rate * torch.mul(self.idx_weights, sample)
-        self.classes[answer] += rate * torch.mul(self.idx_weights, sample)
+    # def update(self, weight, mask, guess, answer, rate):
+    #     sample = weight * mask
+    #     self.counts[guess] += 1
+    #     self.counts[answer] += 1
+    #     print(rate)
+    #     self.classes[guess]  -= rate * torch.mul(self.idx_weights, sample)
+    #     self.classes[answer] += rate * torch.mul(self.idx_weights, sample)
         
     def prefit(self, data, param = None):
         assert self.D == data.shape[1]
@@ -70,6 +71,7 @@ class HD_classifier:
 
     def fit(self, mask, data, label, param, batch = 1024): # From OnlineHD Iterative Fit
         lr = param["lr"]
+        print(lr)
         if self.use_cuda:
             mask = mask.to("cuda")
         data = data * mask
@@ -101,8 +103,12 @@ class HD_classifier:
 
     # Some basis are to be update
     def evaluateBasis(self):
+        # print(self.classes)
         normed_classes = torch.nn.functional.normalize(self.classes, p=2.0, dim=0, eps=1e-12, out=None)
+        # print(normed_classes)
+        # print(normed_classes.shape)
         variances = torch.var(normed_classes, axis = 0) 
+        # print(len(variances))
         order = torch.argsort(variances)
         return order
 

@@ -19,7 +19,7 @@ torch.manual_seed(SEED)
 def online(X, Y, classes, features, dim): #baselineHD
     start_time = time.time()
     model = onlinehd.OnlineHD(classes, features, dim=dim)
-    model.fit(X[0], Y[0], one_pass_fit=False, batch_size = 1024)
+    model.fit(X[0], Y[0], one_pass_fit=False, batch_size = 1024, lr = 0.02)
     train_time = time.time() - start_time
     start_time = time.time()
     y_pred = model(X[1])
@@ -29,12 +29,16 @@ def online(X, Y, classes, features, dim): #baselineHD
 
 def svm(X, Y): 
     model = SVC(gamma = 'scale')
+    start_time = time.time()
     model.fit(X[0], Y[0])
+    train_time = time.time() - start_time
+    start_time = time.time()
     y_pred = model.predict(X[1])
+    test_time = time.time() - start_time
     accuracy = accuracy_score(Y[1], y_pred)
-    return accuracy
+    return train_time, test_time, accuracy
 
-def mlp(X, Y, max_iterations = 500, layer_size = 32, learning_rate = 0.02):
+def mlp(X, Y, max_iterations = 500, layer_size = 32, learning_rate = 0.05):
     train_start = time.time()
     model = MLPClassifier(hidden_layer_sizes=layer_size, max_iter=max_iterations, alpha=1e-4,
                         solver='sgd', verbose=10, tol=1e-4, random_state=1,
@@ -50,8 +54,8 @@ def mlp(X, Y, max_iterations = 500, layer_size = 32, learning_rate = 0.02):
 
 
 # NeuralHD
-def neural(X, Y, features, classes, D = 2000, eD = 4000, percentDrop = 0.5, epochs = 4): 
-    result = neural_tor.model(X, Y, D, eD, percentDrop, epochs, features, classes)
+def neural(X, Y, features, classes, D = 200, eD = 300, percentDrop = 0.5, epochs = 2, lr = 0.035): 
+    result = neural_tor.model(X, Y, D, eD, percentDrop, epochs, features, classes, lr)
     return result
 
 
@@ -71,9 +75,13 @@ if __name__ == "__main__":
     
     X_torch, y_torch = pre.to_torch(X, y)
 
-    # onelinehd_result = online(X_torch, y_torch, n_classes, n_features, dim = 4000)
-    # svm_result = svm(X, Y)
-    # mlp_result = mlp(X, Y)
-    neural_result = neural(X_torch, y_torch, features = n_features, classes = n_classes)
+    # onlinehd_result = online(X_torch, y_torch, n_classes, n_features, dim = 4000)
+    # print(onlinehd_result)
+    # exit()
+    # svm_result = svm(X, y)
+    # print(svm_result)
+    # mlp_result = mlp(X, y)
+    # print(mlp_result)
+    neural_result = neural(X_torch, y_torch, features = n_features, classes = n_classes, lr = 0.025)
     print(neural_result)
 
