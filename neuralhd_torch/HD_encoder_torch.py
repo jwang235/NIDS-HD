@@ -50,7 +50,7 @@ class HD_encoder:
         # noises = []
         encoded_data = torch.empty(param["D"], param["nFeatures"])
         # print(self.basis.size(), data.size()) 
-        encoded_data = torch.matmul(data, self.basis.T).cos_()
+        encoded_data = torch.matmul(data, self.basis.T) #.cos_()
         # print(encoded_data.shape)
         # print(type(encoded_data))
         return encoded_data
